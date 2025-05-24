@@ -1,36 +1,69 @@
-import React from 'react';
-import { Chord } from '@tombatossals/react-chords';
-import { guitar, chordShapes } from '@/lib/chords';
+import { ChordGrid } from '../../components/ChordGrid'
+import Link from 'next/link'
 
-interface SongPageProps {
-  params: {
-    song: string;
-  };
+// Fake song-to-chord map
+const songChordMap: Record<string, string[]> = {
+  'let-it-be': ['C', 'G', 'Am', 'F'],
+  'stand-by-me': ['G', 'Em', 'C', 'D', 'F', 'Am'],
+  'wonderwall': ['Em', 'G', 'D', 'A7sus4', 'F#'],
+  'mary': ['Em', 'G', 'Bm', 'C', 'Cmaj7', 'Gmaj7']
 }
 
-export default function SongPage({ params }: SongPageProps) {
-  // Hardcoded chord progression for demo — replace with dynamic chords later!
-  const chords: (keyof typeof chordShapes)[] = ['C', 'G', 'Am', 'F'];
+type Props = {
+  params: {
+    song: string
+  }
+}
+
+export default function SongPage({ params }: Props) {
+  const songName = params.song
+
+  // Function to normalize song names for comparison
+  const normalizeSongName = (name: string): string => {
+    return name
+      .toLowerCase() // Convert to lowercase
+      .replace(/[^a-z0-9]/g, '') // Remove all non-alphanumeric characters
+  }
+
+  // Find the matching song key
+  const matchingSongKey = Object.keys(songChordMap).find(
+    key => normalizeSongName(key) === normalizeSongName(songName)
+  )
+
+  const chordNames = matchingSongKey ? songChordMap[matchingSongKey] : null
+
+  if (!chordNames) {
+    return (
+      <main className="min-h-screen bg-gray-100">
+        <div className="p-6">
+          <Link
+            href="/"
+            className="inline-block mb-6 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+          >
+            ← Back
+          </Link>
+          <h1 className="text-4xl font-bold text-blue-600 mb-6 text-center">
+            Song not found
+          </h1>
+        </div>
+      </main>
+    )
+  }
 
   return (
-    <main className="p-8 max-w-3xl mx-auto">
-      <h1 className="text-3xl font-bold mb-6">Playalong: {params.song}</h1>
-
-      <div className="grid grid-cols-2 gap-8">
-        {chords.map((chordName) => {
-          const chord = chordShapes[chordName];
-          return (
-            <div key={chordName} className="flex flex-col items-center">
-              <span className="mb-2 text-xl font-semibold">{chordName}</span>
-              {chord ? (
-                <Chord instrument={guitar} chord={chord} />
-              ) : (
-                <span className="text-red-600">Chord diagram not found</span>
-              )}
-            </div>
-          );
-        })}
+    <main className="min-h-screen bg-gray-100">
+      <div className="p-6">
+        <Link
+          href="/"
+          className="inline-block mb-6 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+        >
+          ← Back
+        </Link>
+        <h1 className="text-4xl font-bold text-blue-600 mb-6 text-center capitalize">
+          {matchingSongKey.replace(/-/g, ' ')}
+        </h1>
+        <ChordGrid chordNames={chordNames} />
       </div>
     </main>
-  );
+  )
 }
