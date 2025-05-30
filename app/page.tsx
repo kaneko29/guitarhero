@@ -3,6 +3,9 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+import SpotifySearch from './components/SpotifySearch';
+import { SpotifyAuthButton } from './components/SpotifyAuthButton';
+
 export default function Home() {
   const [songTitle, setSongTitle] = useState('');
   const router = useRouter();
@@ -10,12 +13,19 @@ export default function Home() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!songTitle.trim()) return;
-    router.push(`/playalong/${encodeURIComponent(songTitle.trim())}`);
+    router.push(`/playalong/${encodeURIComponent(songTitle.trim())}/${encodeURIComponent(songTitle.trim())}`);
   };
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center bg-gray-100 p-6">
       <h1 className="text-4xl font-bold text-blue-600 mb-6">GuitarHero 🎸</h1>
+      <SpotifyAuthButton 
+        className="fixed top-4 right-4 z-50"
+        size="sm"
+        />
+      <SpotifySearch />
+      {/* 
+
       <form onSubmit={handleSubmit} className="w-full max-w-md space-y-4">
         <input
           type="text"
@@ -23,6 +33,7 @@ export default function Home() {
           value={songTitle}
           onChange={(e) => setSongTitle(e.target.value)}
           className="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+
         />
         <button
           type="submit"
@@ -31,6 +42,7 @@ export default function Home() {
           Get Chords
         </button>
       </form>
+      */}
     </main>
   );
 }

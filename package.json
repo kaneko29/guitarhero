@@ -11,7 +11,9 @@
   "dependencies": {
     "@tombatossals/chords-db": "^0.5.1",
     "@tombatossals/react-chords": "^0.2.10",
+    "axios": "^1.9.0",
     "next": "15.3.2",
+    "next-auth": "^4.24.11",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
