@@ -11,6 +11,7 @@ import { WordTiming } from '@/lib/types'
 import { useChordData } from '@/lib/dynamicChords'
 import { ChordDiagram } from '@/app/components/ChordDiagram'
 import { supabase } from '@/lib/supabaseClient'
+import { ArrowLeft, Save, Trash2, Plus, Music, AlertCircle } from 'lucide-react'
 
 interface Chord {
     id: number
@@ -46,33 +47,20 @@ export default function EditChordsPage({ params }: { params: Promise<{ artist: s
     useEffect(() => {
         const loadLyrics = async () => {
             try {
-                // First try to get saved edits
-                const { data: songData, error: songError } = await supabase
-                    .from('songs')
-                    .select('id')
-                    .eq('artist', decodedArtist)
-                    .eq('title', decodedSong)
-                    .single()
+                // Check if we're editing an existing version
+                const searchParams = new URLSearchParams(window.location.search)
+                const versionId = searchParams.get('version')
 
                 let savedLyrics = null
                 let savedChords = null
 
-                if (songData) {
-                    const query = supabase
+                // Only try to load saved edits if we have a version ID
+                if (versionId) {
+                    const { data: editData, error: editError } = await supabase
                         .from('song_edits')
                         .select('lyrics, chords')
-                        .eq('song_id', songData.id)
-                        .order('created_at', { ascending: false })
-                        .limit(1)
-
-                    // If version ID is provided in URL, load that specific version
-                    const searchParams = new URLSearchParams(window.location.search)
-                    const versionId = searchParams.get('version')
-                    if (versionId) {
-                        query.eq('id', versionId)
-                    }
-
-                    const { data: editData, error: editError } = await query.single()
+                        .eq('id', versionId)
+                        .single()
 
                     if (editData) {
                         savedLyrics = editData.lyrics
@@ -80,7 +68,7 @@ export default function EditChordsPage({ params }: { params: Promise<{ artist: s
                     }
                 }
 
-                // If no saved edits, get fresh lyrics
+                // If no saved edits or creating new version, get fresh lyrics
                 if (!savedLyrics) {
                     const lrcContent = await getSyncedLyrics(decodedArtist, decodedSong)
                     if (!lrcContent) {
@@ -119,23 +107,7 @@ export default function EditChordsPage({ params }: { params: Promise<{ artist: s
                     })
 
                     setLyricData(processedLyrics)
-
-                    // Extract unique chords from the lyrics
-                    const uniqueChords = new Set<string>()
-                    processedLyrics.forEach(line => {
-                        line.words?.forEach(word => {
-                            if (word.chord) uniqueChords.add(word.chord)
-                        })
-                    })
-
-                    // Convert to Chord array format
-                    const chordArray = Array.from(uniqueChords).map((chord, index) => ({
-                        id: index,
-                        chord_name: chord,
-                        position: index
-                    }))
-
-                    setChords(chordArray)
+                    setChords([]) // Start with empty chords for new versions
                 } else {
                     // Use saved data
                     setLyricData(savedLyrics)
@@ -163,9 +135,16 @@ export default function EditChordsPage({ params }: { params: Promise<{ artist: s
             return
         }
 
+        // Check if chord already exists
+        const normalizedChord = newChord.trim()
+        if (chords.some(chord => chord.chord_name.toLowerCase() === normalizedChord.toLowerCase())) {
+            setError('This chord is already in the list')
+            return
+        }
+
         const newChordObj = {
             id: chords.length,
-            chord_name: newChord.trim(),
+            chord_name: normalizedChord,
             position: chords.length
         }
 
@@ -175,7 +154,20 @@ export default function EditChordsPage({ params }: { params: Promise<{ artist: s
     }
 
     const handleDeleteChord = (chordId: number) => {
-        setChords(chords.filter(chord => chord.id !== chordId))
+        // Remove the chord from the list
+        const updatedChords = chords.filter(chord => chord.id !== chordId)
+        setChords(updatedChords)
+
+        // Remove the chord from all words in the lyrics
+        setLyricData(prevData =>
+            prevData.map(line => ({
+                ...line,
+                words: line.words?.map(word => ({
+                    ...word,
+                    chord: word.chord === chords.find(c => c.id === chordId)?.chord_name ? undefined : word.chord
+                }))
+            }))
+        )
     }
 
     const handleUpdateWordChord = (lineIndex: number, wordIndex: number, chord: string | undefined) => {
@@ -310,168 +302,201 @@ export default function EditChordsPage({ params }: { params: Promise<{ artist: s
         }
     }
 
-    if (loading) return <div className="p-6">Loading...</div>
-    if (!user) return null
+    const handleBack = () => {
+        router.back()
+    }
+
+    if (isLoading) {
+        return (
+            <div className="container py-8">
+                <div className="flex items-center justify-center min-h-[60vh]">
+                    <div className="text-center space-y-4">
+                        <Music className="h-12 w-12 text-primary animate-pulse mx-auto" />
+                        <p className="text-muted-foreground">Loading song data...</p>
+                    </div>
+                </div>
+            </div>
+        )
+    }
 
     return (
-        <main className="min-h-screen bg-gray-100 p-6">
-            <div className="max-w-4xl mx-auto">
-                <div className="flex justify-between items-center mb-6">
+        <div className="container py-8">
+            <div className="max-w-4xl mx-auto space-y-8">
+                {/* Header */}
+                <div className="flex items-center justify-between">
                     <button
-                        onClick={() => router.back()}
-                        className="inline-block px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                        onClick={handleBack}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80 transition-colors"
                     >
-                        ← Back
+                        <ArrowLeft className="h-4 w-4" />
+                        Back
                     </button>
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-2">
                         <button
                             onClick={handleSave}
                             disabled={isSaving}
-                            className="inline-block px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
+                            <Save className="h-4 w-4" />
                             {isSaving ? 'Saving...' : 'Save Changes'}
                         </button>
                         {new URLSearchParams(window.location.search).get('version') && (
                             <button
                                 onClick={handleDelete}
-                                className="inline-block px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90 transition-colors"
                             >
+                                <Trash2 className="h-4 w-4" />
                                 Delete Version
                             </button>
                         )}
                     </div>
                 </div>
 
-                <div className="bg-white rounded-xl shadow-lg p-6">
-                    <h1 className="text-4xl font-bold text-blue-600 mb-2 text-center capitalize">
-                        {decodedSong}
-                    </h1>
-                    <h2 className="text-2xl text-gray-600 mb-6 text-center capitalize">
-                        by {decodedArtist}
-                    </h2>
+                {error && (
+                    <div className="p-4 bg-destructive/10 border border-destructive/20 text-destructive rounded-md flex items-start gap-3">
+                        <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" />
+                        <p>{error}</p>
+                    </div>
+                )}
 
-                    {saveMessage && (
-                        <div className="mb-4 p-3 bg-green-100 border border-green-300 text-green-700 rounded-lg">
-                            {saveMessage}
-                        </div>
-                    )}
+                {saveMessage && (
+                    <div className="p-4 bg-primary/10 border border-primary/20 text-primary rounded-md">
+                        {saveMessage}
+                    </div>
+                )}
 
-                    {error && (
-                        <div className="mb-4 p-3 bg-red-100 border border-red-300 text-red-700 rounded-lg">
-                            {error}
-                        </div>
-                    )}
+                {/* Title */}
+                <div className="space-y-2">
+                    <h1 className="text-3xl font-bold text-foreground">{decodedSong}</h1>
+                    <p className="text-xl text-muted-foreground">{decodedArtist}</p>
+                </div>
 
-                    {/* Add Chord Form */}
-                    <div className="mb-8">
-                        <div className="flex gap-2">
+                {/* Add New Chord */}
+                <div className="bg-card border border-border rounded-lg p-6">
+                    <div className="flex items-end gap-4">
+                        <div className="flex-1">
+                            <label htmlFor="newChord" className="block text-sm font-medium text-foreground mb-2">
+                                Add New Chord
+                            </label>
                             <input
                                 type="text"
+                                id="newChord"
                                 value={newChord}
                                 onChange={(e) => setNewChord(e.target.value)}
-                                placeholder="Enter chord (e.g., C, Am, G7)"
-                                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                onKeyPress={(e) => e.key === 'Enter' && handleAddChord()}
+                                placeholder="Enter chord name (e.g., C, Am, G7)"
+                                className="w-full px-4 py-2 bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50"
                             />
-                            <button
-                                onClick={handleAddChord}
-                                disabled={!newChord.trim()}
-                                className="px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                Add Chord
-                            </button>
                         </div>
+                        <button
+                            onClick={handleAddChord}
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                        >
+                            <Plus className="h-4 w-4" />
+                            Add
+                        </button>
                     </div>
-
-                    {/* Chords List */}
-                    <div className="space-y-4">
-                        <h3 className="text-xl font-semibold mb-4">Available Chords</h3>
-                        {chords.length > 0 ? (
-                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                                {chords.map((chord) => (
-                                    <div
-                                        key={chord.id}
-                                        className="bg-gray-50 p-4 rounded-lg flex items-center justify-between cursor-pointer hover:bg-gray-100 transition-colors"
-                                        onClick={() => setSelectedChord(chord.chord_name)}
-                                    >
-                                        <span className="text-lg font-semibold">{chord.chord_name}</span>
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation()
-                                                handleDeleteChord(chord.id)
-                                            }}
-                                            className="text-red-500 hover:text-red-700"
-                                            title="Delete chord"
-                                        >
-                                            🗑️
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <p className="text-gray-500 text-center">No chords added yet</p>
-                        )}
-                    </div>
-
-                    {/* Lyrics with Chord Editing */}
-                    <div className="mt-8">
-                        <h3 className="text-xl font-semibold mb-4">Lyrics with Chords</h3>
-                        <div className="space-y-4">
-                            {lyricData.map((line, lineIndex) => (
-                                <div key={line.id} className="p-4 bg-gray-50 rounded-lg">
-                                    <div className="flex flex-wrap gap-2">
-                                        {line.words?.map((word: WordTiming, wordIndex: number) => (
-                                            <div key={wordIndex} className="relative group">
-                                                <select
-                                                    value={word.chord || ''}
-                                                    onChange={(e) => handleUpdateWordChord(lineIndex, wordIndex, e.target.value || undefined)}
-                                                    className="absolute -top-6 left-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                >
-                                                    <option value="">No chord</option>
-                                                    {chords.map(chord => (
-                                                        <option key={chord.id} value={chord.chord_name}>
-                                                            {chord.chord_name}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                                <span className={`inline-block px-1 ${word.chord ? 'text-blue-600 font-semibold' : ''}`}>
-                                                    {word.word}
-                                                </span>
-                                                {word.chord && (
-                                                    <span className="absolute -top-6 left-0 text-sm text-blue-600 font-semibold">
-                                                        {word.chord}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Chord Diagram Modal */}
-                    {selectedChord && (
-                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                            <div className="bg-white rounded-xl p-6 max-w-sm w-full mx-4">
-                                <div className="flex justify-between items-center mb-4">
-                                    <h3 className="text-xl font-semibold">{selectedChord}</h3>
-                                    <button
-                                        onClick={() => setSelectedChord(null)}
-                                        className="text-gray-500 hover:text-gray-700"
-                                    >
-                                        ✕
-                                    </button>
-                                </div>
-                                <div className="flex justify-center">
-                                    <ChordDiagram
-                                        chord={getChordData(selectedChord) || { frets: [], fingers: [], barres: [], capo: false }}
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                    )}
                 </div>
+
+                {/* Chord Grid */}
+                <div className="bg-card border border-border rounded-lg p-6">
+                    <h2 className="text-lg font-medium text-foreground mb-4">Available Chords</h2>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                        {chords.map((chord) => (
+                            <div
+                                key={chord.id}
+                                className="group relative bg-background/50 p-4 rounded-md flex items-center justify-between cursor-pointer hover:bg-background/80 transition-colors"
+                                onClick={() => setSelectedChord(chord.chord_name)}
+                            >
+                                <span className="font-medium text-foreground">{chord.chord_name}</span>
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleDeleteChord(chord.id)
+                                    }}
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive/80"
+                                    title="Delete chord"
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Lyrics with Chords */}
+                <div className="bg-card border border-border rounded-lg p-6">
+                    <h2 className="text-lg font-medium text-foreground mb-4">Lyrics with Chords</h2>
+                    <div className="space-y-6">
+                        {lyricData.map((line, lineIndex) => (
+                            <div key={lineIndex} className="p-4 bg-background/50 rounded-md">
+                                <div className="flex flex-wrap gap-x-4 gap-y-2">
+                                    {line.words?.map((word, wordIndex) => (
+                                        <div key={wordIndex} className="group relative inline-flex items-center">
+                                            <select
+                                                value={word.chord || ''}
+                                                onChange={(e) => handleUpdateWordChord(lineIndex, wordIndex, e.target.value || undefined)}
+                                                className="absolute -top-6 left-0 opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                                            >
+                                                <option value="">No chord</option>
+                                                {chords.map((chord) => (
+                                                    <option key={chord.id} value={chord.chord_name}>
+                                                        {chord.chord_name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <span className={`inline-block ${word.chord ? 'text-primary font-medium' : 'text-foreground'}`}>
+                                                {word.word}
+                                            </span>
+                                            {word.chord && (
+                                                <span className="absolute -top-6 left-0 text-sm text-primary font-medium">
+                                                    {word.chord}
+                                                </span>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Chord Diagram Modal */}
+                {selectedChord && (
+                    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50">
+                        <div className="bg-card border border-border rounded-lg p-6 max-w-sm w-full mx-4 relative">
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="text-lg font-medium text-foreground">{selectedChord}</h3>
+                                <button
+                                    onClick={() => setSelectedChord(null)}
+                                    className="text-muted-foreground hover:text-foreground transition-colors"
+                                >
+                                    <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        width="24"
+                                        height="24"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="2"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        className="h-5 w-5"
+                                    >
+                                        <line x1="18" y1="6" x2="6" y2="18" />
+                                        <line x1="6" y1="6" x2="18" y2="18" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <div className="flex justify-center">
+                                <ChordDiagram
+                                    chord={getChordData(selectedChord) || { frets: [], fingers: [], barres: [], capo: false }}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
-        </main>
+        </div>
     )
 } 

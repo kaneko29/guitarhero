@@ -3,6 +3,7 @@
 import { useSession } from 'next-auth/react'
 import { useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { Music } from 'lucide-react'
 
 interface SpotifyTrack {
   name: string
@@ -68,7 +69,7 @@ export default function SpotifySearch() {
   if (status === 'loading') {
     return (
       <div className="text-center py-8">
-        <p className="text-gray-600">Loading...</p>
+        <p className="text-muted-foreground">Loading...</p>
       </div>
     )
   }
@@ -76,7 +77,10 @@ export default function SpotifySearch() {
   if (!session?.accessToken) {
     return (
       <div className="text-center py-8">
-        <p className="text-gray-600">Please sign in to search for songs</p>
+        <div className="flex flex-col items-center space-y-4">
+          <Music className="h-12 w-12 text-muted-foreground" />
+          <p className="text-muted-foreground">Please sign in with Spotify to search for songs</p>
+        </div>
       </div>
     )
   }
@@ -90,12 +94,12 @@ export default function SpotifySearch() {
           onChange={(e) => setSearchQuery(e.target.value)}
           onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
           placeholder="Search for a song..."
-          className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+          className="flex-1 px-4 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
         />
         <button
           onClick={handleSearch}
           disabled={isSearching}
-          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-6 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isSearching ? 'Searching...' : 'Search'}
         </button>
@@ -107,22 +111,37 @@ export default function SpotifySearch() {
             <button
               key={track.uri}
               onClick={() => handleSelectTrack(track)}
-              className="w-full text-left p-4 bg-white rounded-lg shadow hover:bg-gray-50 transition-colors flex items-center gap-4"
+              className="w-full text-left p-4 bg-background rounded-md border border-border hover:bg-accent/5 transition-colors flex items-center gap-4 group"
             >
               {track.album?.images?.[0]?.url && (
                 <div className="w-12 h-12 flex-shrink-0">
                   <img
                     src={track.album.images[0].url}
                     alt={`${track.name} album art`}
-                    className="w-full h-full object-cover rounded"
+                    className="w-full h-full object-cover rounded-md"
                   />
                 </div>
               )}
               <div className="flex-grow">
-                <div className="font-semibold">{track.name}</div>
-                <div className="text-sm text-gray-600">{track.artists[0].name}</div>
+                <div className="font-semibold text-foreground">{track.name}</div>
+                <div className="text-sm text-muted-foreground">{track.artists[0].name}</div>
               </div>
-              <div className="text-blue-600 font-medium">Chord Versions</div>
+              <div className="flex items-center gap-2 text-primary font-medium group-hover:gap-3 transition-all duration-200">
+                <span>Chord Versions</span>
+                <svg
+                  className="w-4 h-4 transform group-hover:translate-x-0.5 transition-transform duration-200"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 5l7 7-7 7"
+                  />
+                </svg>
+              </div>
             </button>
           ))}
         </div>

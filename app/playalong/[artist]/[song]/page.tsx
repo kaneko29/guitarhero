@@ -14,6 +14,7 @@ import { useUser, useUserLoading } from '@/app/providers/UserProvider'
 import SpotifyPlayer from '../../../components/SpotifyPlayer'
 import LyricsDisplay from '@/app/components/LyricsDisplay'
 import { supabase } from '@/lib/supabaseClient'
+import { ArrowLeft, Music, AlertCircle } from 'lucide-react'
 
 type Props = {
   params: Promise<{
@@ -117,8 +118,9 @@ export default function SongPage({ params }: Props) {
           .limit(1)
           .single()
 
+        // If song not found in database, that's okay - we'll still try to load lyrics
         if (songError && songError.code === 'PGRST116') {
-          setError('Song not found')
+          // Don't set error here - we'll check lyrics first
           return
         }
 
@@ -208,7 +210,12 @@ export default function SongPage({ params }: Props) {
     const loadLyrics = async () => {
       try {
         const lyrics = await getProcessedLyrics(decodedArtist, decodedSong, savedChords)
+        if (!lyrics) {
+          setError('No lyrics found for this song')
+          return
+        }
         setLyricData(lyrics)
+        setError(null) // Clear any previous errors if lyrics are found
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load lyrics')
       }
@@ -231,37 +238,85 @@ export default function SongPage({ params }: Props) {
     router.back()
   }
 
+  // Extract unique chord names from lyrics
+  const chordNames: string[] = lyricData
+    ? Array.from(
+      new Set(
+        lyricData
+          .flatMap((line: any) => line.words || [])
+          .map((word: WordTiming) => word.chord)
+          .filter((chord: string | undefined): chord is string => typeof chord === 'string')
+      )
+    ) as string[]
+    : []
+
   return (
-    <main className="min-h-screen bg-gray-100">
-      <div className="p-6">
-        <button
-          onClick={handleBack}
-          className="inline-block mb-6 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-        >
-          ← Back
-        </button>
-
-        {error && (
-          <div className="mb-4 p-3 bg-red-100 border border-red-300 text-red-700 rounded-lg">
-            {error}
+    <main className="min-h-screen bg-background">
+      <div className="container py-8">
+        <div className="max-w-4xl mx-auto space-y-8">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <button
+              onClick={handleBack}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80 transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back
+            </button>
           </div>
-        )}
 
-        <h1 className="text-4xl font-bold text-blue-600 mb-6 text-center capitalize">
-          {decodedSong}
-        </h1>
+          {error && (
+            <div className="p-4 bg-destructive/10 border border-destructive/20 text-destructive rounded-md flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" />
+              <p>{error}</p>
+            </div>
+          )}
 
-        <h2 className="text-2xl text-gray-600 mb-6 text-center capitalize">
-          by {decodedArtist}
-        </h2>
-
-        {song?.spotifyId && (
-          <div className="w-full max-w-2xl mx-auto mb-8">
-            <SpotifyPlayer uri={`spotify:track:${song.spotifyId}`} />
+          {/* Song Title */}
+          <div className="text-center space-y-2">
+            <h1 className="text-3xl font-bold text-foreground capitalize">
+              {decodedSong}
+            </h1>
+            <p className="text-xl text-muted-foreground capitalize">
+              {decodedArtist}
+            </p>
           </div>
-        )}
 
-        <LyricsDisplay lyricData={lyricData} currentLyricIndex={currentLyricIndex} />
+          {/* Player and Lyrics Section */}
+          <div className="grid gap-8">
+            {/* Spotify Player */}
+            <div className="bg-card border border-border rounded-lg p-6">
+              <SpotifyPlayer
+                trackUri={uri || ''}
+                onPositionChange={setPlaybackPosition}
+              />
+            </div>
+
+            {/* Lyrics Display */}
+            <div className="bg-card border border-border rounded-lg p-6">
+              {lyricData ? (
+                <LyricsDisplay
+                  lyricData={lyricData}
+                  currentLyricIndex={currentLyricIndex}
+                />
+              ) : (
+                <div className="flex items-center justify-center py-12">
+                  <div className="text-center space-y-4">
+                    <Music className="h-12 w-12 text-muted-foreground mx-auto" />
+                    <p className="text-muted-foreground">Loading lyrics...</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Chord Grid */}
+            {savedChords && chordNames.length > 0 && (
+              <div className="bg-card border border-border rounded-lg p-6">
+                <ChordGrid chordNames={chordNames} />
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </main>
   )

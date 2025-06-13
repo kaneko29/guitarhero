@@ -1,6 +1,7 @@
 'use client'
 
 import { signIn, signOut, useSession } from 'next-auth/react'
+import { Music } from 'lucide-react'
 
 interface SpotifyAuthButtonProps {
   className?: string
@@ -11,8 +12,8 @@ interface SpotifyAuthButtonProps {
   showSignOut?: boolean
 }
 
-export function SpotifyAuthButton({ 
-  className = '', 
+export function SpotifyAuthButton({
+  className = '',
   signInText,
   signOutText,
   size = 'md',
@@ -28,21 +29,22 @@ export function SpotifyAuthButton({
   }
 
   const variantClasses = {
-    primary: 'bg-blue-500 hover:bg-blue-600 text-white',
-    secondary: 'bg-gray-200 hover:bg-gray-300 text-gray-800'
+    primary: 'bg-[#1DB954] hover:bg-[#1ed760] text-white',
+    secondary: 'bg-secondary hover:bg-secondary/80 text-secondary-foreground'
   }
 
   const signOutVariantClasses = {
-    primary: 'bg-blue-500 hover:bg-blue-600 text-white',
-    secondary: 'bg-gray-200 hover:bg-gray-300 text-gray-800'
+    primary: 'bg-[#1DB954] hover:bg-[#1ed760] text-white',
+    secondary: 'bg-secondary hover:bg-secondary/80 text-secondary-foreground'
   }
 
   if (status === 'loading') {
     return (
-      <button 
+      <button
         disabled
-        className={`${variantClasses[variant]} ${sizeClasses[size]} rounded-lg font-semibold transition-colors opacity-50 cursor-not-allowed ${className}`}
+        className={`${variantClasses[variant]} ${sizeClasses[size]} rounded-md font-medium transition-colors opacity-50 cursor-not-allowed flex items-center justify-center gap-2 ${className}`}
       >
+        <Music className="h-4 w-4" />
         Loading...
       </button>
     )
@@ -50,20 +52,22 @@ export function SpotifyAuthButton({
 
   if (status === 'authenticated' && showSignOut) {
     return (
-      <button 
+      <button
         onClick={() => signOut()}
-        className={`${signOutVariantClasses[variant]} ${sizeClasses[size]} rounded-lg font-semibold transition-colors ${className}`}
+        className={`${signOutVariantClasses[variant]} ${sizeClasses[size]} rounded-md font-medium transition-colors flex items-center justify-center gap-2 ${className}`}
       >
+        <Music className="h-4 w-4" />
         {signOutText || 'Sign out of Spotify'}
       </button>
     )
   }
 
   return (
-    <button 
+    <button
       onClick={() => signIn('spotify')}
-      className={`${variantClasses[variant]} ${sizeClasses[size]} rounded-lg font-semibold transition-colors ${className}`}
+      className={`${variantClasses[variant]} ${sizeClasses[size]} rounded-md font-medium transition-colors flex items-center justify-center gap-2 ${className}`}
     >
+      <Music className="h-4 w-4" />
       {signInText || 'Sign in with Spotify'}
     </button>
   )

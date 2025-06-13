@@ -1,10 +1,10 @@
 'use client'
 import { use } from 'react'
-
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useUser, useUserLoading } from '@/app/providers/UserProvider'
 import { supabase } from '@/lib/supabaseClient'
+import { Music, Edit, Plus, Clock, User, Mic, ArrowLeft } from 'lucide-react'
 
 interface ChordVersion {
     id: string
@@ -60,7 +60,7 @@ export default function ChordVersionsPage({ params }: { params: Promise<{ artist
                     .single()
 
                 if (songError) {
-                    console.error('Error fetching song:', songError)
+                    //console.error('Error fetching song:', songError)
                     if (songError.code === 'PGRST116') {
                         setVersions([])
                         setIsLoading(false)
@@ -201,126 +201,161 @@ export default function ChordVersionsPage({ params }: { params: Promise<{ artist
     }
 
     const handleCreateNew = () => {
-        if (!user) {
-            const currentPath = `/chord-versions/${artist}/${song}`
-            router.push(`/login?returnTo=${encodeURIComponent(currentPath)}`)
-            return
-        }
+        if (!user) return
         router.push(`/edit-chords/${artist}/${song}`)
     }
 
-    if (loading) return <div className="p-6">Loading...</div>
+    const handleBack = () => {
+        router.back()
+    }
+
+    if (isLoading) {
+        return (
+            <div className="container py-8">
+                <div className="flex items-center justify-center min-h-[60vh]">
+                    <div className="text-center space-y-4">
+                        <Music className="h-12 w-12 text-primary animate-pulse mx-auto" />
+                        <p className="text-muted-foreground">Loading chord versions...</p>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
+    if (error) {
+        return (
+            <div className="container py-8">
+                <div className="max-w-2xl mx-auto">
+                    <div className="p-4 bg-destructive/10 border border-destructive/20 text-destructive rounded-md">
+                        {error}
+                    </div>
+                </div>
+            </div>
+        )
+    }
 
     return (
-        <main className="min-h-screen bg-gray-100 p-6">
-            <div className="max-w-4xl mx-auto">
-                <div className="flex justify-between items-center mb-6">
+        <div className="container py-8">
+            <div className="max-w-4xl mx-auto space-y-8">
+                {/* Header */}
+                <div className="flex items-center justify-between">
                     <button
-                        onClick={() => router.back()}
-                        className="inline-block px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                        onClick={handleBack}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80 transition-colors"
                     >
-                        ← Back
+                        <ArrowLeft className="h-4 w-4" />
+                        Back
                     </button>
                     <button
                         onClick={handleCreateNew}
                         disabled={!user}
-                        className={`inline-block px-6 py-2 rounded-lg transition ${user
-                            ? 'bg-green-600 text-white hover:bg-green-700'
-                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                            }`}
-                        title={!user ? "Sign in to create a new version" : "Create new version"}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
+                        <Plus className="h-4 w-4" />
                         Create New Version
                     </button>
                 </div>
 
-                <div className="bg-white rounded-xl shadow-lg p-6">
-                    <h1 className="text-4xl font-bold text-blue-600 mb-2 text-center capitalize">
-                        {decodedSong}
-                    </h1>
-                    <h2 className="text-2xl text-gray-600 mb-6 text-center capitalize">
-                        by {decodedArtist}
-                    </h2>
+                {/* Title */}
+                <div className="space-y-2">
+                    <h1 className="text-3xl font-bold text-foreground">{decodedSong}</h1>
+                    <p className="text-xl text-muted-foreground">{decodedArtist}</p>
+                </div>
 
-                    {error && (
-                        <div className="mb-4 p-3 bg-red-100 border border-red-300 text-red-700 rounded-lg">
-                            {error}
+                {/* Versions List */}
+                <div className="space-y-4">
+                    {/* Karaoke Version */}
+                    <div className="group relative bg-card border border-border rounded-lg p-6 hover:border-primary/50 transition-colors">
+                        <div className="flex items-start justify-between">
+                            <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                    <Mic className="h-4 w-4 text-primary" />
+                                    <span className="font-medium text-foreground">
+                                        Karaoke Version
+                                    </span>
+                                    <span className="px-2 py-0.5 text-xs bg-primary/10 text-primary rounded-full">
+                                        Default
+                                    </span>
+                                </div>
+                                <p className="text-sm text-muted-foreground">
+                                    Listen with synchronized lyrics
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => handleViewVersion('karaoke')}
+                                    className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                                >
+                                    View
+                                </button>
+                            </div>
                         </div>
-                    )}
+                    </div>
 
-                    {isLoading ? (
-                        <div className="text-center py-8">
-                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                            <p>Loading versions...</p>
+                    {versions.length === 0 ? (
+                        <div className="text-center py-12 border border-dashed border-border rounded-lg">
+                            <Music className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                            <h3 className="text-lg font-medium text-foreground mb-2">No versions yet</h3>
+                            <p className="text-muted-foreground mb-4">Be the first to create a chord version for this song!</p>
+                            <button
+                                onClick={handleCreateNew}
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                            >
+                                <Plus className="h-4 w-4" />
+                                Create First Version
+                            </button>
                         </div>
                     ) : (
-                        <div className="space-y-4">
-                            {/* Karaoke Version */}
-                            <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
-                                <div>
-                                    <h3 className="font-semibold flex items-center gap-2">
-                                        Karaoke Version
-                                        <span className="text-sm text-blue-600 bg-blue-50 px-2 py-1 rounded">Default</span>
-                                    </h3>
-                                    <p className="text-sm text-gray-500">
-                                        Listen with synchronized lyrics
-                                    </p>
-                                </div>
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={() => handleViewVersion('karaoke')}
-                                        className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition"
-                                    >
-                                        View
-                                    </button>
-                                </div>
-                            </div>
-
-                            {versions.length === 0 ? (
-                                <div className="text-center py-8 text-gray-500">
-                                    <p className="text-lg mb-2">No chord versions found</p>
-                                    <p className="text-sm">Be the first to create one!</p>
-                                </div>
-                            ) : (
-                                versions.map((version) => (
-                                    <div
-                                        key={version.id}
-                                        className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                                    >
-                                        <div>
-                                            <h3 className="font-semibold flex items-center gap-2">
-                                                {version.user_name}
+                        <div className="grid gap-4">
+                            {versions.map((version) => (
+                                <div
+                                    key={version.id}
+                                    className="group relative bg-card border border-border rounded-lg p-6 hover:border-primary/50 transition-colors"
+                                >
+                                    <div className="flex items-start justify-between">
+                                        <div className="space-y-1">
+                                            <div className="flex items-center gap-2">
+                                                <User className="h-4 w-4 text-muted-foreground" />
+                                                <span className="font-medium text-foreground">
+                                                    {version.user_name}
+                                                </span>
                                                 {version.is_owner && (
-                                                    <span className="text-sm text-blue-600 bg-blue-50 px-2 py-1 rounded">Your version</span>
+                                                    <span className="px-2 py-0.5 text-xs bg-primary/10 text-primary rounded-full">
+                                                        You
+                                                    </span>
                                                 )}
-                                            </h3>
-                                            <p className="text-sm text-gray-500">
-                                                Created {new Date(version.created_at).toLocaleDateString()}
-                                            </p>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                <Clock className="h-4 w-4" />
+                                                <time dateTime={version.created_at}>
+                                                    {new Date(version.created_at).toLocaleDateString()}
+                                                </time>
+                                            </div>
                                         </div>
-                                        <div className="flex gap-2">
+                                        <div className="flex items-center gap-2">
                                             <button
                                                 onClick={() => handleViewVersion(version.id)}
-                                                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition"
+                                                className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
                                             >
                                                 View
                                             </button>
                                             {version.is_owner && (
                                                 <button
                                                     onClick={() => handleEditVersion(version.id)}
-                                                    className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition"
+                                                    className="inline-flex items-center gap-2 px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80 transition-colors"
                                                 >
+                                                    <Edit className="h-4 w-4" />
                                                     Edit
                                                 </button>
                                             )}
                                         </div>
                                     </div>
-                                ))
-                            )}
+                                </div>
+                            ))}
                         </div>
                     )}
                 </div>
             </div>
-        </main>
+        </div>
     )
 } 

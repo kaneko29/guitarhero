@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useUser } from '@/app/providers/UserProvider'
 import { SpotifyAuthButton } from './SpotifyAuthButton'
 import AuthButton from './AuthButton'
+import { Guitar } from 'lucide-react'
 
 export default function Navbar() {
     const pathname = usePathname()
@@ -14,21 +15,23 @@ export default function Navbar() {
     const isLoginPage = pathname === '/login'
 
     return (
-        <nav className="bg-white shadow-sm">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="flex justify-between h-16">
-                    <div className="flex">
-                        <div className="flex-shrink-0 flex items-center">
-                            <Link href="/" className="text-2xl font-bold text-blue-600">
-                                GuitarHero 🎸
-                            </Link>
-                        </div>
-                        <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
+        <nav className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <div className="container flex h-16 items-center">
+                <div className="flex flex-1 items-center justify-between">
+                    <div className="flex items-center gap-6">
+                        <Link
+                            href="/"
+                            className="flex items-center space-x-2 text-xl font-bold text-primary hover:text-primary/90 transition-colors"
+                        >
+                            <span className="guitar-hero-text">GuitarHero</span>
+                            <Guitar className="h-6 w-6 text-accent" />
+                        </Link>
+                        <div className="hidden md:flex items-center space-x-6">
                             <Link
                                 href="/"
-                                className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${isActive('/')
-                                    ? 'border-blue-500 text-gray-900'
-                                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                                className={`text-sm font-medium transition-colors hover:text-primary ${isActive('/')
+                                    ? 'text-foreground'
+                                    : 'text-muted-foreground'
                                     }`}
                             >
                                 Home
@@ -36,9 +39,9 @@ export default function Navbar() {
                             {user && (
                                 <Link
                                     href="/account"
-                                    className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${isActive('/account')
-                                        ? 'border-blue-500 text-gray-900'
-                                        : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                                    className={`text-sm font-medium transition-colors hover:text-primary ${isActive('/account')
+                                        ? 'text-foreground'
+                                        : 'text-muted-foreground'
                                         }`}
                                 >
                                     Account
@@ -47,7 +50,7 @@ export default function Navbar() {
                         </div>
                     </div>
                     {!isLoginPage && (
-                        <div className="flex items-center space-x-4">
+                        <div className="flex items-center gap-4">
                             <SpotifyAuthButton size="sm" />
                             <AuthButton size="sm" />
                         </div>
