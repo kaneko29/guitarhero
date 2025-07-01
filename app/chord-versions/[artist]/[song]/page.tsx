@@ -12,55 +12,73 @@ interface ChordVersion {
     user_id: string
     user_name: string
     is_owner: boolean
+    is_featured: boolean
+}
+
+interface Genre {
+    id: number
+    name: string
+    description: string
+}
+
+interface Song {
+    id: string
+    genre_id: number | null
+}
+
+interface Profile {
+    id: string
+    full_name: string | null
+    username: string | null
+    created_at: string
 }
 
 interface SongEdit {
     id: string
     created_at: string
     user_id: string
-    profiles: {
-        id: string
-        full_name: string | null
-        username: string | null
-        created_at: string
-    } | null
+    profiles: Profile | null
 }
 
 export default function ChordVersionsPage({ params }: { params: Promise<{ artist: string; song: string }> }) {
     const [versions, setVersions] = useState<ChordVersion[]>([])
     const [isLoading, setIsLoading] = useState(true)
-    const [error, setError] = useState('')
-    const router = useRouter()
-    const user = useUser()
-    const loading = useUserLoading()
-    const searchParams = useSearchParams()
-    const uri = searchParams.get('uri')
+    const [error, setError] = useState<string | null>(null)
+    const [genres, setGenres] = useState<Genre[]>([])
+    const [selectedGenre, setSelectedGenre] = useState<number | null>(null)
+    const [songId, setSongId] = useState<string | null>(null)
+    const [isFeatured, setIsFeatured] = useState<boolean>(false)
+    const [featureLoading, setFeatureLoading] = useState(false)
+    const [featuredVersionId, setFeaturedVersionId] = useState<string | null>(null)
+    const [featureEditLoading, setFeatureEditLoading] = useState<string | null>(null)
 
     const { artist, song } = use(params)
     const decodedArtist = decodeURIComponent(artist)
     const decodedSong = decodeURIComponent(song)
+    const user = useUser() as any
+    const router = useRouter()
 
     useEffect(() => {
-        if (!loading && !user) {
-            // Only redirect to login if trying to edit or create
-            // Remove the automatic redirect
-            setIsLoading(false)
-        }
-    }, [user, loading])
-
-    useEffect(() => {
-        const loadVersions = async () => {
+        const loadData = async () => {
             try {
+                // Fetch genres
+                const { data: genresData, error: genresError } = await supabase
+                    .from('genres')
+                    .select('*')
+                    .order('id')
+
+                if (genresError) throw genresError
+                setGenres(genresData || [])
+
                 // Get the song ID first
                 const { data: songData, error: songError } = await supabase
                     .from('songs')
-                    .select('id')
+                    .select('id, genre_id, is_featured')
                     .eq('artist', decodedArtist)
                     .eq('title', decodedSong)
                     .single()
 
                 if (songError) {
-                    //console.error('Error fetching song:', songError)
                     if (songError.code === 'PGRST116') {
                         setVersions([])
                         setIsLoading(false)
@@ -76,26 +94,18 @@ export default function ChordVersionsPage({ params }: { params: Promise<{ artist
                     return
                 }
 
-                console.log('Found song data:', songData)
+                setSongId(songData.id)
+                setSelectedGenre(songData.genre_id)
+                setIsFeatured(!!songData.is_featured)
 
-                // Test query to get all users first
-                const { data: allUsers, error: usersError } = await supabase
-                    .from('profiles')
-                    .select('*')
-
-                console.log('All users in profiles:', allUsers)
-                if (usersError) {
-                    console.error('Error fetching all users:', usersError)
-                }
-
-                // Get all edits for this song with more detailed logging
-                console.log('Fetching edits for song_id:', songData.id)
+                // Get all edits for this song
                 const { data: edits, error: editsError } = await supabase
                     .from('song_edits')
                     .select(`
                         id,
                         created_at,
                         user_id,
+                        is_featured,
                         profiles!user_id (
                             id,
                             full_name,
@@ -106,116 +116,201 @@ export default function ChordVersionsPage({ params }: { params: Promise<{ artist
                     .eq('song_id', songData.id)
                     .order('created_at', { ascending: false })
 
-                if (editsError) {
-                    console.error('Error fetching edits:', editsError)
-                    throw editsError
-                }
-
-                console.log('Raw edits data:', JSON.stringify(edits, null, 2))
-                console.log('Current user:', user?.id)
+                if (editsError) throw editsError
 
                 if (!edits) {
-                    console.log('No edits found')
                     setVersions([])
+                    setFeaturedVersionId(null)
                     return
                 }
 
-                // Log each edit's user relationship
-                edits.forEach(edit => {
-                    console.log(`Edit ${edit.id} user relationship:`, {
-                        edit_user_id: edit.user_id,
-                        profile_id: edit.profiles?.id,
-                        profile_name: edit.profiles?.full_name,
-                        has_profile: !!edit.profiles
-                    })
-                })
+                // Find featured version
+                const featured = edits.find((e: any) => e.is_featured);
+                setFeaturedVersionId(featured ? featured.id : null);
 
-                // Process the versions to include user names and ownership
-                const processedVersions = edits.map(edit => {
-                    const isOwner = user ? edit.user_id === user.id : false
-                    console.log(`Processing edit ${edit.id}:`, {
-                        user_id: edit.user_id,
-                        isOwner,
-                        profile: edit.profiles,
-                        currentUser: user?.id
-                    })
-
-                    // Get the best display name in order of preference:
-                    // 1. Full name from profile
-                    // 2. Username from profile
-                    // 3. Email username (if current user)
-                    // 4. "Anonymous"
-                    let displayName = 'Anonymous'
-                    if (isOwner) {
-                        displayName = 'You'
-                    } else if (edit.profiles?.full_name) {
-                        displayName = edit.profiles.full_name
-                    } else if (edit.profiles?.username) {
-                        displayName = edit.profiles.username
-                    }
-
+                // Transform the data to match our interface
+                const transformedVersions = edits.map((edit: any) => {
+                    const isOwner = edit.user_id === user?.id
                     return {
                         id: edit.id,
                         created_at: edit.created_at,
                         user_id: edit.user_id,
-                        user_name: displayName,
-                        is_owner: isOwner
+                        user_name: edit.profiles?.full_name || edit.profiles?.username || 'Unknown User',
+                        is_owner: isOwner,
+                        is_featured: !!edit.is_featured,
                     }
                 })
 
-                console.log('Processed versions:', processedVersions)
-                setVersions(processedVersions)
+                setVersions(transformedVersions)
             } catch (err) {
-                console.error('Error loading versions:', err)
-                if (err instanceof Error) {
-                    console.error('Error details:', {
-                        message: err.message,
-                        name: err.name,
-                        stack: err.stack
-                    })
-                    setError(err.message)
-                } else {
-                    console.error('Unknown error type:', err)
-                    setError('Failed to load chord versions')
-                }
+                setError(err instanceof Error ? err.message : 'Failed to load data')
             } finally {
                 setIsLoading(false)
             }
         }
 
-        loadVersions()
-    }, [user, decodedArtist, decodedSong])
-
-    const handleViewVersion = (versionId: string) => {
-        const uriParam = uri ? `&uri=${encodeURIComponent(uri)}` : ''
-        router.push(`/playalong/${artist}/${song}?version=${versionId}${uriParam}`)
-    }
-
-    const handleEditVersion = (versionId: string) => {
-        if (!user) {
-            const currentPath = `/chord-versions/${artist}/${song}`
-            router.push(`/login?returnTo=${encodeURIComponent(currentPath)}`)
-            return
-        }
-        router.push(`/edit-chords/${artist}/${song}?version=${versionId}`)
-    }
-
-    const handleCreateNew = () => {
-        if (!user) return
-        router.push(`/edit-chords/${artist}/${song}`)
-    }
+        loadData()
+    }, [decodedArtist, decodedSong, user?.id])
 
     const handleBack = () => {
         router.back()
     }
 
+    const handleCreateNew = () => {
+        // Preserve the Spotify URI if it exists in the current URL
+        const currentUri = new URLSearchParams(window.location.search).get('uri')
+        const baseUrl = `/edit-chords/${artist}/${song}`
+        const params = new URLSearchParams()
+
+        if (currentUri) {
+            params.set('uri', currentUri)
+        }
+
+        const queryString = params.toString()
+        const finalUrl = queryString ? `${baseUrl}?${queryString}` : baseUrl
+
+        router.push(finalUrl)
+    }
+
+    const handleViewVersion = async (versionId: string) => {
+        try {
+            // Check if there's already a Spotify URI in the current URL
+            const currentUri = new URLSearchParams(window.location.search).get('uri')
+
+            let spotifyUri = currentUri
+
+            // If no URI in current URL, try to get it from the database
+            if (!spotifyUri) {
+                const { data: songData, error: songError } = await supabase
+                    .from('songs')
+                    .select('spotify_uri')
+                    .eq('artist', decodedArtist)
+                    .eq('title', decodedSong)
+                    .single()
+
+                if (songError && songError.code !== 'PGRST116') {
+                    throw songError
+                }
+
+                spotifyUri = songData?.spotify_uri || null
+            }
+
+            // Construct the URL with the Spotify URI if available
+            const baseUrl = `/playalong/${artist}/${song}`
+            const params = new URLSearchParams()
+
+            if (spotifyUri) {
+                params.set('uri', spotifyUri)
+            }
+
+            if (versionId) {
+                params.set('version', versionId)
+            }
+
+            const queryString = params.toString()
+            const finalUrl = queryString ? `${baseUrl}?${queryString}` : baseUrl
+
+            router.push(finalUrl)
+        } catch (err) {
+            console.error('Error navigating to version:', err)
+            // Still navigate even if we can't get the URI
+            router.push(`/playalong/${artist}/${song}?version=${versionId}`)
+        }
+    }
+
+    const handleEditVersion = (versionId: string) => {
+        // Preserve the Spotify URI if it exists in the current URL
+        const currentUri = new URLSearchParams(window.location.search).get('uri')
+        const baseUrl = `/edit-chords/${artist}/${song}`
+        const params = new URLSearchParams()
+
+        if (currentUri) {
+            params.set('uri', currentUri)
+        }
+
+        params.set('version', versionId)
+
+        const queryString = params.toString()
+        const finalUrl = `${baseUrl}?${queryString}`
+
+        router.push(finalUrl)
+    }
+
+    const handleGenreChange = async (genreId: number | null) => {
+        if (!songId) return
+
+        try {
+            const { error } = await supabase
+                .from('songs')
+                .update({ genre_id: genreId })
+                .eq('id', songId)
+
+            if (error) throw error
+            setSelectedGenre(genreId)
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to update genre')
+        }
+    }
+
+    const handleFeatureToggle = async () => {
+        if (!songId) return;
+        setFeatureLoading(true);
+        const { error } = await supabase
+            .from('songs')
+            .update({ is_featured: !isFeatured })
+            .eq('id', songId);
+        if (!error) setIsFeatured((prev) => !prev);
+        setFeatureLoading(false);
+    };
+
+    // Update handleFeatureEdit to handle both feature and unfeature
+    const handleUnfeatureEdit = async (versionId: string) => {
+        if (!songId) return;
+        setFeatureEditLoading(versionId);
+        const { error } = await supabase
+            .from('song_edits')
+            .update({ is_featured: false })
+            .eq('id', versionId);
+        if (!error) {
+            setFeaturedVersionId(null);
+            setVersions((prev) => prev.map(v => v.id === versionId ? { ...v, is_featured: false } : v));
+        }
+        setFeatureEditLoading(null);
+    };
+
+    // Add handler for featuring a version
+    const handleFeatureEdit = async (versionId: string) => {
+        if (!songId) return;
+        setFeatureEditLoading(versionId);
+        // Unfeature all, then feature this one
+        const { error: unfeatureError } = await supabase
+            .from('song_edits')
+            .update({ is_featured: false })
+            .eq('song_id', songId);
+        if (unfeatureError) {
+            setFeatureEditLoading(null);
+            return;
+        }
+        const { error: featureError } = await supabase
+            .from('song_edits')
+            .update({ is_featured: true })
+            .eq('id', versionId);
+        if (!featureError) {
+            setFeaturedVersionId(versionId);
+            setVersions((prev) => prev.map(v => ({ ...v, is_featured: v.id === versionId })));
+        }
+        setFeatureEditLoading(null);
+    };
+
     if (isLoading) {
         return (
             <div className="container py-8">
-                <div className="flex items-center justify-center min-h-[60vh]">
-                    <div className="text-center space-y-4">
-                        <Music className="h-12 w-12 text-primary animate-pulse mx-auto" />
-                        <p className="text-muted-foreground">Loading chord versions...</p>
+                <div className="max-w-4xl mx-auto">
+                    <div className="flex items-center justify-center min-h-[60vh]">
+                        <div className="text-center space-y-4">
+                            <Music className="h-12 w-12 text-primary animate-pulse mx-auto" />
+                            <p className="text-muted-foreground">Loading song data...</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -249,17 +344,70 @@ export default function ChordVersionsPage({ params }: { params: Promise<{ artist
                     <button
                         onClick={handleCreateNew}
                         disabled={!user}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <Plus className="h-4 w-4" />
                         Create New Version
                     </button>
                 </div>
 
-                {/* Title */}
-                <div className="space-y-2">
-                    <h1 className="text-3xl font-bold text-foreground">{decodedSong}</h1>
-                    <p className="text-xl text-muted-foreground">{decodedArtist}</p>
+                {/* Title and Genre */}
+                <div className="space-y-6">
+                    <div className="space-y-2">
+                        <h1 className="text-3xl font-bold text-foreground">{decodedSong}</h1>
+                        <p className="text-xl text-muted-foreground">{decodedArtist}</p>
+                        {user?.is_admin && songId && (
+                            <button
+                                onClick={handleFeatureToggle}
+                                disabled={featureLoading}
+                                className={`ml-2 px-3 py-1 rounded-md text-sm font-semibold ${isFeatured ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground border'} ${featureLoading ? 'opacity-50' : ''}`}
+                            >
+                                {isFeatured ? 'Remove from Explore' : 'Add to Explore'}
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Genre Selection - only for admins */}
+                    {user?.is_admin && (
+                        <div className="bg-card border border-border rounded-lg p-6">
+                            <div className="flex items-end gap-4">
+                                <div className="flex-1">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <label htmlFor="genre" className="text-sm font-medium text-foreground">
+                                            {selectedGenre ? 'Change Genre' : 'Add Genre'}
+                                        </label>
+                                        {selectedGenre && (
+                                            <button
+                                                onClick={() => handleGenreChange(null)}
+                                                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                                            >
+                                                Remove
+                                            </button>
+                                        )}
+                                    </div>
+                                    <select
+                                        id="genre"
+                                        value={selectedGenre || ''}
+                                        onChange={(e) => handleGenreChange(e.target.value ? Number(e.target.value) : null)}
+                                        className="w-full px-4 py-2 bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50"
+                                    >
+                                        <option value="">Select a genre...</option>
+                                        {genres.map((genre) => (
+                                            <option key={genre.id} value={genre.id}>
+                                                {genre.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    {selectedGenre && (
+                                        <p className="mt-2 text-sm text-muted-foreground">
+                                            {genres.find(g => g.id === selectedGenre)?.description}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    {/* End Genre Selection */}
                 </div>
 
                 {/* Versions List */}
@@ -284,7 +432,7 @@ export default function ChordVersionsPage({ params }: { params: Promise<{ artist
                             <div className="flex items-center gap-2">
                                 <button
                                     onClick={() => handleViewVersion('karaoke')}
-                                    className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                                    className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary hover:bg-opacity-90 transition-colors"
                                 >
                                     View
                                 </button>
@@ -299,60 +447,83 @@ export default function ChordVersionsPage({ params }: { params: Promise<{ artist
                             <p className="text-muted-foreground mb-4">Be the first to create a chord version for this song!</p>
                             <button
                                 onClick={handleCreateNew}
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary hover:bg-opacity-90 transition-colors"
                             >
                                 <Plus className="h-4 w-4" />
                                 Create First Version
                             </button>
                         </div>
                     ) : (
-                        <div className="grid gap-4">
-                            {versions.map((version) => (
-                                <div
-                                    key={version.id}
-                                    className="group relative bg-card border border-border rounded-lg p-6 hover:border-primary/50 transition-colors"
-                                >
-                                    <div className="flex items-start justify-between">
-                                        <div className="space-y-1">
-                                            <div className="flex items-center gap-2">
-                                                <User className="h-4 w-4 text-muted-foreground" />
-                                                <span className="font-medium text-foreground">
-                                                    {version.user_name}
-                                                </span>
-                                                {version.is_owner && (
-                                                    <span className="px-2 py-0.5 text-xs bg-primary/10 text-primary rounded-full">
-                                                        You
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                                <Clock className="h-4 w-4" />
-                                                <time dateTime={version.created_at}>
-                                                    {new Date(version.created_at).toLocaleDateString()}
-                                                </time>
-                                            </div>
-                                        </div>
+                        versions.map((version) => (
+                            <div key={version.id} className="group relative bg-card border border-border rounded-lg p-6 hover:border-primary/50 transition-colors">
+                                <div className="flex items-start justify-between">
+                                    <div className="space-y-1">
                                         <div className="flex items-center gap-2">
-                                            <button
-                                                onClick={() => handleViewVersion(version.id)}
-                                                className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-                                            >
-                                                View
-                                            </button>
+                                            <Edit className="h-4 w-4 text-primary" />
+                                            <span className="font-medium text-foreground">
+                                                Chord Version
+                                            </span>
                                             {version.is_owner && (
-                                                <button
-                                                    onClick={() => handleEditVersion(version.id)}
-                                                    className="inline-flex items-center gap-2 px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80 transition-colors"
-                                                >
-                                                    <Edit className="h-4 w-4" />
-                                                    Edit
-                                                </button>
+                                                <span className="px-2 py-0.5 text-xs bg-primary/10 text-primary rounded-full">
+                                                    Your Version
+                                                </span>
+                                            )}
+                                            {version.is_featured && (
+                                                <span className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded-full ml-2">
+                                                    Featured
+                                                </span>
                                             )}
                                         </div>
+                                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                                            <div className="flex items-center gap-1">
+                                                <User className="h-3 w-3" />
+                                                {version.user_name}
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                                <Clock className="h-3 w-3" />
+                                                {new Date(version.created_at).toLocaleDateString()}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 w-[180px] justify-end">
+                                        <button
+                                            onClick={() => handleViewVersion(version.id)}
+                                            className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary hover:bg-opacity-90 transition-colors"
+                                        >
+                                            View
+                                        </button>
+                                        {version.is_owner && (
+                                            <button
+                                                onClick={() => handleEditVersion(version.id)}
+                                                className="px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/90 transition-colors"
+                                            >
+                                                Edit
+                                            </button>
+                                        )}
+                                        {/* Admin-only feature/unfeature button */}
+                                        {user?.is_admin && (
+                                            version.is_featured ? (
+                                                <button
+                                                    onClick={() => handleUnfeatureEdit(version.id)}
+                                                    disabled={featureEditLoading === version.id}
+                                                    className={`px-3 py-1 rounded-md text-xs font-semibold border bg-green-100 text-green-700 border-green-300 ${featureEditLoading === version.id ? 'opacity-50' : ''}`}
+                                                >
+                                                    {featureEditLoading === version.id ? 'Unfeaturing...' : 'Unfeature'}
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={() => handleFeatureEdit(version.id)}
+                                                    disabled={featureEditLoading === version.id}
+                                                    className={`px-3 py-1 rounded-md text-xs font-semibold border bg-muted text-foreground border ${featureEditLoading === version.id ? 'opacity-50' : ''}`}
+                                                >
+                                                    {featureEditLoading === version.id ? 'Featuring...' : 'Feature'}
+                                                </button>
+                                            )
+                                        )}
                                     </div>
                                 </div>
-                            ))}
-                        </div>
+                            </div>
+                        ))
                     )}
                 </div>
             </div>

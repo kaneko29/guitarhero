@@ -25,13 +25,6 @@ interface ParsedLrc {
   lyrics: DetailedLyricLine[];
 }
 
-const spotifyTrack = {
-  name: 'Stairway to Heaven',
-  artists: [{ name: 'Led Zeppelin' }],
-  album: { name: 'Led Zeppelin IV' },
-  duration_ms: 482000
-};
-
 /**
  * Parse LRC file content into our data structure
  */

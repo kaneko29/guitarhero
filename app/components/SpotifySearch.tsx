@@ -1,17 +1,26 @@
 'use client'
 
 import { useSession } from 'next-auth/react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { Music } from 'lucide-react'
+import { getSyncedLyrics } from '@/lib/lrclib'
+import { parseLrcFile } from '@/lib/lrcParser'
 
 interface SpotifyTrack {
   name: string
   artists: { name: string }[]
   uri: string
   album: {
+    name: string
     images: { url: string }[]
   }
+}
+
+interface Genre {
+  id: number
+  name: string
+  description: string
 }
 
 export default function SpotifySearch() {
@@ -19,6 +28,8 @@ export default function SpotifySearch() {
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<SpotifyTrack[]>([])
   const [isSearching, setIsSearching] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [isSavingSong, setIsSavingSong] = useState(false)
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return
@@ -28,6 +39,8 @@ export default function SpotifySearch() {
     }
 
     setIsSearching(true)
+    setError(null)
+
     try {
       console.log('Searching for:', searchQuery)
       const response = await fetch(`/api/spotify/search?q=${encodeURIComponent(searchQuery)}`, {
@@ -61,9 +74,72 @@ export default function SpotifySearch() {
     }
   }
 
-  const handleSelectTrack = (track: SpotifyTrack) => {
-    // Navigate to chord versions page
-    window.location.href = `/chord-versions/${track.artists[0].name}/${track.name}?uri=${encodeURIComponent(track.uri)}`
+  const handleSelectTrack = async (track: SpotifyTrack) => {
+    try {
+      setIsSavingSong(true)
+      // Extract Spotify ID from URI
+      const spotifyId = track.uri.split(':').pop()
+
+      // Check if song already exists
+      const { data: existingSong } = await supabase
+        .from('songs')
+        .select('id, lyrics')
+        .eq('artist', track.artists[0].name)
+        .eq('title', track.name)
+        .single()
+
+      let processedLyrics = null
+
+      // Only fetch lyrics if the song doesn't exist or doesn't have lyrics
+      if (!existingSong || !existingSong.lyrics) {
+        const lrcContent = await getSyncedLyrics(track.artists[0].name, track.name)
+        if (lrcContent) {
+          const parsed = parseLrcFile(lrcContent)
+          processedLyrics = parsed.lyrics
+        }
+      }
+
+      // Create song data object
+      const songData = {
+        artist: track.artists[0].name,
+        title: track.name,
+        spotify_uri: track.uri,
+        spotify_id: spotifyId,
+        image_url: track.album?.images?.[0]?.url || null,
+        album_name: track.album?.name || null,
+        lyrics: processedLyrics,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+
+      if (existingSong) {
+        // Only update lyrics if they don't exist
+        const updateData = existingSong.lyrics ? { ...songData, lyrics: undefined } : songData
+
+        const { error: updateError } = await supabase
+          .from('songs')
+          .update(updateData)
+          .eq('id', existingSong.id)
+
+        if (updateError) throw updateError
+      } else {
+        // Insert new song
+        const { error: insertError } = await supabase
+          .from('songs')
+          .insert([songData])
+
+        if (insertError) throw insertError
+      }
+
+      // Navigate to chord versions page
+      window.location.href = `/chord-versions/${encodeURIComponent(track.artists[0].name)}/${encodeURIComponent(track.name)}?uri=${encodeURIComponent(track.uri)}`
+    } catch (error) {
+      console.error('Error saving song data:', error)
+      // Still navigate even if save fails
+      window.location.href = `/chord-versions/${encodeURIComponent(track.artists[0].name)}/${encodeURIComponent(track.name)}?uri=${encodeURIComponent(track.uri)}`
+    } finally {
+      setIsSavingSong(false)
+    }
   }
 
   if (status === 'loading') {
@@ -99,11 +175,26 @@ export default function SpotifySearch() {
         <button
           onClick={handleSearch}
           disabled={isSearching}
-          className="px-6 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-6 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary hover:bg-opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isSearching ? 'Searching...' : 'Search'}
         </button>
       </div>
+
+      {error && (
+        <div className="p-4 bg-destructive/10 border border-destructive/20 text-destructive rounded-md">
+          {error}
+        </div>
+      )}
+
+      {isSavingSong && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-background p-6 rounded-lg shadow-lg flex flex-col items-center gap-4">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            <p className="text-foreground">Loading song data...</p>
+          </div>
+        </div>
+      )}
 
       {searchResults.length > 0 && (
         <div className="space-y-2">
@@ -111,10 +202,11 @@ export default function SpotifySearch() {
             <button
               key={track.uri}
               onClick={() => handleSelectTrack(track)}
-              className="w-full text-left p-4 bg-background rounded-md border border-border hover:bg-accent/5 transition-colors flex items-center gap-4 group"
+              disabled={isSavingSong}
+              className="w-full text-left p-4 bg-background rounded-md border border-border hover:bg-accent/5 transition-colors flex items-center gap-4 group disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {track.album?.images?.[0]?.url && (
-                <div className="w-12 h-12 flex-shrink-0">
+                <div className="w-12 h-12 flex-shrink-0 transform group-hover:scale-105 transition-transform duration-200">
                   <img
                     src={track.album.images[0].url}
                     alt={`${track.name} album art`}
@@ -122,11 +214,11 @@ export default function SpotifySearch() {
                   />
                 </div>
               )}
-              <div className="flex-grow">
-                <div className="font-semibold text-foreground">{track.name}</div>
-                <div className="text-sm text-muted-foreground">{track.artists[0].name}</div>
+              <div className="flex-grow min-w-0">
+                <div className="font-semibold text-foreground truncate transform group-hover:translate-x-1 transition-transform duration-200">{track.name}</div>
+                <div className="text-sm text-muted-foreground truncate transform group-hover:translate-x-1 transition-transform duration-200">{track.artists[0].name}</div>
               </div>
-              <div className="flex items-center gap-2 text-primary font-medium group-hover:gap-3 transition-all duration-200">
+              <div className="flex items-center gap-2 text-primary font-medium group-hover:gap-3 transition-all duration-200 flex-shrink-0">
                 <span>Chord Versions</span>
                 <svg
                   className="w-4 h-4 transform group-hover:translate-x-0.5 transition-transform duration-200"

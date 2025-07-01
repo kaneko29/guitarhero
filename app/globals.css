@@ -96,7 +96,7 @@
   }
 
   .btn-primary {
-    @apply bg-primary text-primary-foreground hover:bg-primary/90;
+    @apply bg-primary text-primary-foreground hover:bg-primary hover:bg-opacity-90;
   }
 
   .btn-secondary {

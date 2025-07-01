@@ -16,11 +16,13 @@ type ChordDiagramProps = {
     capo: boolean
   }
   lite?: boolean
+  size?: number
 }
 
 export const ChordDiagram: React.FC<ChordDiagramProps> = ({
   chord,
   lite = false,
+  size = 100,
 }) => {
   const instrument = {
     strings: 6,
@@ -32,5 +34,14 @@ export const ChordDiagram: React.FC<ChordDiagramProps> = ({
     },
   }
 
-  return <Chord chord={chord} instrument={instrument} lite={lite} />
+  // Ensure chord data is valid
+  if (!chord || !Array.isArray(chord.frets)) {
+    return null
+  }
+
+  return (
+    <div style={{ width: size, height: size }}>
+      <Chord chord={chord} instrument={instrument} lite={lite} />
+    </div>
+  )
 }

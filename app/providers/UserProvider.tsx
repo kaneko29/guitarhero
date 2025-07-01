@@ -12,13 +12,47 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setUser(user)
+    async function fetchProfile() {
+      setLoading(true)
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      if (!authUser) {
+        setUser(null)
+        setLoading(false)
+        return
+      }
+      // Fetch profile
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authUser.id)
+        .single()
+      if (error || !profile) {
+        setUser(null)
+      } else {
+        setUser({ ...authUser, ...profile })
+      }
       setLoading(false)
-    })
+    }
+    fetchProfile()
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user || null)
+      if (!session?.user) {
+        setUser(null)
+        return
+      }
+      // Fetch profile on auth state change
+      supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', session.user.id)
+        .single()
+        .then(({ data: profile, error }) => {
+          if (error || !profile) {
+            setUser(null)
+          } else {
+            setUser({ ...session.user, ...profile })
+          }
+        })
     })
 
     return () => listener.subscription.unsubscribe()

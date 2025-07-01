@@ -7,14 +7,15 @@ interface Song {
   title: string;
   artist: string;
   album?: string;
-  spotifyId: string;
+  spotify_id: string;
+  spotify_uri: string;
   youtubeId?: string;
   duration: number; // milliseconds
   key?: string; // e.g., "C", "Am", "F#m"
   tempo?: number; // BPM
   timeSignature?: string; // e.g., "4/4", "3/4"
-  createdAt: Date;
-  updatedAt: Date;
+  created_at: Date;
+  updated_at: Date;
 }
 
 // Lyric line with timing
@@ -139,6 +140,23 @@ interface SongQuery {
   genre?: string;
 }
 
+// New types for refactored song edits
+interface ChordPlacement {
+  line_index: number;      // Which line in the original lyrics
+  position: number;        // Position as a percentage (0-100) of the line's width
+  chord: string;          // The chord to be played
+  chord_position?: number; // Optional: which position/variation of the chord
+}
+
+interface SongEdit {
+  id: string;
+  song_id: string;
+  user_id: string;
+  chord_data: ChordPlacement[];
+  created_at: Date;
+  updated_at?: Date;
+}
+
 // Export all types
 export type {
   Song,
@@ -154,5 +172,8 @@ export type {
   ProcessingJob,
   LyricsWithTiming,
   ChordProgression,
-  SongQuery
+  SongQuery,
+  // Add new types to exports
+  ChordPlacement,
+  SongEdit
 };

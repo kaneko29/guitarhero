@@ -10,7 +10,7 @@ const scopes = [
   'user-read-currently-playing'
 ].join(' ')
 
-const handler = NextAuth({
+export const authOptions = {
   providers: [
     SpotifyProvider({
       clientId: process.env.SPOTIFY_CLIENT_ID!,
@@ -23,31 +23,33 @@ const handler = NextAuth({
     }),
   ],
   callbacks: {
-    async jwt({ token, account }) {
+    async jwt({ token, account }: { token: any; account: any }) {
       if (account) {
         token.accessToken = account.access_token
         token.refreshToken = account.refresh_token
         token.accessTokenExpires = account.expires_at! * 1000
       }
-      
+
       if (Date.now() < (token.accessTokenExpires as number)) {
         return token
       }
-      
+
       return await refreshAccessToken(token)
     },
-    async session({ session, token }) {
+    async session({ session, token }: { session: any; token: any }) {
       session.accessToken = token.accessToken as string
       session.error = token.error
       return session
     },
   },
-})
+}
+
+const handler = NextAuth(authOptions)
 
 async function refreshAccessToken(token: any) {
   try {
     const url = 'https://accounts.spotify.com/api/token'
-    
+
     const response = await fetch(url, {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',

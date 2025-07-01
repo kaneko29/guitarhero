@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useUser } from '@/app/providers/UserProvider'
 import { SpotifyAuthButton } from './SpotifyAuthButton'
 import AuthButton from './AuthButton'
-import { Guitar } from 'lucide-react'
+import { Guitar, Compass } from 'lucide-react'
 
 export default function Navbar() {
     const pathname = usePathname()
@@ -36,6 +36,16 @@ export default function Navbar() {
                             >
                                 Home
                             </Link>
+                            <Link
+                                href="/explore"
+                                className={`text-sm font-medium transition-colors hover:text-primary flex items-center gap-1 ${isActive('/explore')
+                                    ? 'text-foreground'
+                                    : 'text-muted-foreground'
+                                    }`}
+                            >
+                                <Compass className="h-4 w-4" />
+                                Explore
+                            </Link>
                             {user && (
                                 <Link
                                     href="/account"
@@ -45,6 +55,17 @@ export default function Navbar() {
                                         }`}
                                 >
                                     Account
+                                </Link>
+                            )}
+                            {user && user.is_admin && (
+                                <Link
+                                    href="/admin"
+                                    className={`text-sm font-medium transition-colors hover:text-primary ${isActive('/admin')
+                                        ? 'text-foreground'
+                                        : 'text-muted-foreground'
+                                        }`}
+                                >
+                                    Admin
                                 </Link>
                             )}
                         </div>

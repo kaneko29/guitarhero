@@ -7,6 +7,7 @@ type ChordData = {
     fingers: number[];
     barres: number[];
     capo: boolean;
+    position?: number; // Add position number to identify different variations
 };
 
 export const useChordData = () => {
@@ -25,7 +26,7 @@ export const useChordData = () => {
         loadChordData();
     }, []);
 
-    const getChordData = (chordName: string): ChordData | undefined => {
+    const getChordData = (chordName: string): ChordData[] | undefined => {
         if (!chordsDb) return undefined;
 
         // Handle special cases for root notes
@@ -54,14 +55,14 @@ export const useChordData = () => {
         const chordData = chordList.find((chord: any) => chord.suffix === suffix);
         if (!chordData) return undefined;
 
-        // Select only the fields we need from the position data
-        const position = chordData.positions[0];
-        return {
+        // Return all positions with their index
+        return chordData.positions.map((position: any, index: number) => ({
             frets: position.frets,
             fingers: position.fingers,
             barres: position.barres,
-            capo: position.capo ?? false  // Use nullish coalescing to default to false if capo is undefined
-        };
+            capo: position.capo ?? false,
+            position: index + 1
+        }));
     };
 
     return { getChordData };
