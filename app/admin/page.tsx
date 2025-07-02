@@ -5,8 +5,13 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { supabase } from '@/lib/supabaseClient';
 
+interface UserType {
+    is_admin: boolean;
+    // add other properties as needed
+}
+
 export default function AdminPage() {
-    const user = useUser();
+    const user = useUser() as UserType | null;
     const loading = useUserLoading();
     const router = useRouter();
     const [songs, setSongs] = useState([]);
