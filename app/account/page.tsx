@@ -13,6 +13,12 @@ interface Profile {
     updated_at: string | null
 }
 
+interface UserType {
+    id: string;
+    email: string;
+    // add other properties as needed
+}
+
 export default function AccountPage() {
     const [profile, setProfile] = useState<Profile | null>(null)
     const [fullName, setFullName] = useState('')
@@ -25,7 +31,7 @@ export default function AccountPage() {
     const [usernameError, setUsernameError] = useState('')
 
     const router = useRouter()
-    const user = useUser()
+    const user = useUser() as UserType | null
     const loading = useUserLoading()
 
     useEffect(() => {
