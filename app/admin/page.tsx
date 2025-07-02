@@ -14,11 +14,11 @@ export default function AdminPage() {
     const user = useUser() as UserType | null;
     const loading = useUserLoading();
     const router = useRouter();
-    const [songs, setSongs] = useState([]);
+    const [songs, setSongs] = useState<any[]>([]);
     const [songsLoading, setSongsLoading] = useState(true);
     const [songsError, setSongsError] = useState('');
     const [toggling, setToggling] = useState<string | null>(null);
-    const [genres, setGenres] = useState([]);
+    const [genres, setGenres] = useState<any[]>([]);
     const [genreName, setGenreName] = useState("");
     const [genreImage, setGenreImage] = useState("");
     const [genreDesc, setGenreDesc] = useState("");
