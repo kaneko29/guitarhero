@@ -4,11 +4,18 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 
-const UserContext = createContext(null)
-const UserLoadingContext = createContext(true)
+interface UserProfile {
+  id: string
+  email?: string
+  is_admin?: boolean
+  // Add other profile fields as needed
+}
+
+const UserContext = createContext<UserProfile | null>(null)
+const UserLoadingContext = createContext<boolean>(true)
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState(null)
+  const [user, setUser] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -67,10 +74,10 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   )
 }
 
-export function useUser() {
+export function useUser(): UserProfile | null {
   return useContext(UserContext)
 }
 
-export function useUserLoading() {
+export function useUserLoading(): boolean {
   return useContext(UserLoadingContext)
 }
