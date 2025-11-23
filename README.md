@@ -33,6 +33,12 @@ A modern web application that helps guitarists learn and play along with their f
 - User-contributed chord arrangements
 - Admin verification system for quality control
 
+### 🤖 **AI-Powered Learning Assistant**
+- Personalized chord guidance and finger positioning tips
+- Song-specific practice strategies and recommendations
+- On-demand music theory explanations
+- Context-aware assistance based on current song and chords
+
 ### 🎨 **Modern UI/UX**
 - Beautiful, responsive design built with Next.js and Tailwind CSS
 - Smooth animations and transitions
@@ -47,6 +53,7 @@ A modern web application that helps guitarists learn and play along with their f
 - **Database**: Supabase (PostgreSQL)
 - **Chords**: React Chords library
 - **Audio**: Spotify Web Playback SDK
+- **AI**: LangChain with OpenAI API for intelligent learning assistance
 - **Deployment**: Vercel-ready
 
 ## Getting Started
@@ -88,6 +95,9 @@ A modern web application that helps guitarists learn and play along with their f
    NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
    SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+
+   # OpenAI (for AI Chatbot)
+   OPENAI_API_KEY=your_openai_api_key
    ```
 
 4. **Set up Spotify App**
@@ -101,7 +111,14 @@ A modern web application that helps guitarists learn and play along with their f
    - Run the migration files in `supabase/migrations/` to set up the database schema
    - Copy your Supabase URL and keys to `.env.local`
 
-6. **Run the development server**
+6. **Set up OpenAI API** (for AI Chatbot feature)
+   - Go to [OpenAI Platform](https://platform.openai.com/)
+   - Create an account or sign in
+   - Navigate to API Keys section
+   - Create a new API key
+   - Copy the API key to your `.env.local` as `OPENAI_API_KEY`
+
+7. **Run the development server**
    ```bash
    npm run dev
    # or

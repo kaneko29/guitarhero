@@ -126,6 +126,8 @@ export default forwardRef<SpotifyPlayerRef, Props>(function SpotifyPlayer({ trac
   const previousPathRef = useRef(pathname)
   const initializationRef = useRef(false)
   const initialLoadRef = useRef(true)
+  const previousTrackUriRef = useRef<string | undefined>(trackUri)
+  const currentTrackUriRef = useRef<string | undefined>(trackUri)
 
   // Expose cleanup function to parent
   useImperativeHandle(ref, () => ({
@@ -250,14 +252,20 @@ export default forwardRef<SpotifyPlayerRef, Props>(function SpotifyPlayer({ trac
   // Handle path changes
   useEffect(() => {
     console.log('Path changed:', { previous: previousPathRef.current, current: pathname })
-    if (previousPathRef.current !== pathname) {
+    // Only cleanup if we're actually navigating to a different path (not on initial mount)
+    if (previousPathRef.current && previousPathRef.current !== pathname) {
       console.log('Navigating within app, cleaning up player...')
       // Use an async function to ensure cleanup completes
       const handleNavigation = async () => {
         await cleanup(true) // Disconnect when navigating within the app
         previousPathRef.current = pathname
+        // Reset initialization flag so player can reinitialize on new page
+        initializationRef.current = false
       }
       handleNavigation()
+    } else {
+      // Update pathname ref on initial mount
+      previousPathRef.current = pathname
     }
   }, [pathname])
 
@@ -345,53 +353,85 @@ export default forwardRef<SpotifyPlayerRef, Props>(function SpotifyPlayer({ trac
           setDeviceId(device_id)
           setIsReady(true)
           setIsInitializing(false)
+          initialLoadRef.current = false
 
-          if (trackUri && session?.accessToken) {
-            console.log('Setting up track playback...')
-            fetch('https://api.spotify.com/v1/me/player', {
-              method: 'PUT',
-              headers: {
-                'Authorization': `Bearer ${session.accessToken}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                device_ids: [device_id],
-                play: false
-              })
-            }).then(() => {
-              console.log('Device set as active')
-              return fetch('https://api.spotify.com/v1/me/player/play', {
-                method: 'PUT',
-                headers: {
-                  'Authorization': `Bearer ${session.accessToken}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  uris: [trackUri],
-                }),
-              })
-            }).then(() => {
-              console.log('Track queued for playback')
-              return fetch('https://api.spotify.com/v1/me/player/pause', {
+          // Use a function to get the current trackUri value (to avoid stale closure)
+          const loadTrackIfAvailable = async () => {
+            // Get the current trackUri from the ref (which is always up to date)
+            const currentTrackUri = currentTrackUriRef.current && currentTrackUriRef.current.trim() !== ''
+              ? currentTrackUriRef.current
+              : null
+
+            if (currentTrackUri && session?.accessToken) {
+              console.log('Setting up initial track playback...', currentTrackUri)
+              previousTrackUriRef.current = currentTrackUri
+
+              // First, stop any existing playback
+              fetch('https://api.spotify.com/v1/me/player/pause', {
                 method: 'PUT',
                 headers: {
                   'Authorization': `Bearer ${session.accessToken}`
                 }
+              }).catch(() => {
+                // Ignore errors if nothing is playing
+              }).then(() => {
+                // Set device as active
+                return fetch('https://api.spotify.com/v1/me/player', {
+                  method: 'PUT',
+                  headers: {
+                    'Authorization': `Bearer ${session.accessToken}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    device_ids: [device_id],
+                    play: false
+                  })
+                })
+              }).then(() => {
+                console.log('Device set as active')
+                // Play the track from the beginning
+                return fetch('https://api.spotify.com/v1/me/player/play', {
+                  method: 'PUT',
+                  headers: {
+                    'Authorization': `Bearer ${session.accessToken}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    uris: [currentTrackUri],
+                    position_ms: 0
+                  }),
+                })
+              }).then(() => {
+                console.log('Track queued for playback')
+                // Pause immediately so user can control when to start
+                return fetch('https://api.spotify.com/v1/me/player/pause', {
+                  method: 'PUT',
+                  headers: {
+                    'Authorization': `Bearer ${session.accessToken}`
+                  }
+                })
+              }).then(() => {
+                console.log('Track playback initialized')
+                // Wait a bit for the state to update, then get initial state
+                return new Promise(resolve => setTimeout(resolve, 500))
+              }).then(() => {
+                return spotifyPlayer.getCurrentState()
+              }).then((state) => {
+                if (state) {
+                  setPlaybackState(state)
+                  setCurrentTrack(state.track_window.current_track)
+                }
+              }).catch((err) => {
+                console.error('Error setting up track playback:', err)
+                setIsReady(false)
               })
-            }).then(() => {
-              console.log('Track playback initialized')
-              // Get initial state after setup
-              return spotifyPlayer.getCurrentState()
-            }).then((state) => {
-              if (state) {
-                setPlaybackState(state)
-                setCurrentTrack(state.track_window.current_track)
-              }
-            }).catch((err) => {
-              console.error('Error setting up track playback:', err)
-              setIsReady(false)
-            })
+            } else {
+              console.log('No trackUri available yet when player became ready')
+            }
           }
+
+          // Load track if available
+          loadTrackIfAvailable()
         })
 
         spotifyPlayer.addListener('not_ready', ({ device_id }: { device_id: string }) => {
@@ -445,41 +485,63 @@ export default forwardRef<SpotifyPlayerRef, Props>(function SpotifyPlayer({ trac
     initializePlayer()
 
     return () => {
-      // Don't disconnect on component unmount - this prevents issues when React
-      // unmounts components during development or other non-navigation scenarios
-      console.log('Component unmounting, but keeping player connected')
-
-      // However, we should still try to stop playback when the component unmounts
-      if (session?.accessToken) {
-        console.log('Stopping playback on component unmount...')
-        fetch('https://api.spotify.com/v1/me/player/pause', {
-          method: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${session.accessToken}`
-          }
-        }).catch(err => {
-          console.error('Error stopping playback on unmount:', err)
-        })
+      // Cleanup when component unmounts or dependencies change
+      console.log('Component unmounting or session changed, cleaning up player...')
+      // Only cleanup if we're actually unmounting or session changed significantly
+      // Don't cleanup on every render - let the cleanup function handle it properly
+      if (playerRef.current) {
+        cleanup(true)
       }
     }
-  }, [session, status, trackUri])
+  }, [session, status]) // Remove trackUri from dependencies - we handle trackUri changes separately
+
+  // Update trackUri ref immediately when it changes (runs on every render with new trackUri)
+  useEffect(() => {
+    if (trackUri && trackUri.trim() !== '') {
+      currentTrackUriRef.current = trackUri
+    }
+  }, [trackUri])
 
   // Handle trackUri changes after player is ready
   useEffect(() => {
-    if (isReady && trackUri && session?.accessToken && deviceId && !initialLoadRef.current) {
-      console.log('Track URI changed, updating playback...')
-      fetch('https://api.spotify.com/v1/me/player', {
+    // Check if trackUri actually changed before updating the ref
+    const previousUri = previousTrackUriRef.current
+    const hasValidTrackUri = trackUri && trackUri.trim() !== ''
+    const trackUriChanged = hasValidTrackUri && trackUri !== previousUri
+
+    // Update ref when trackUri changes (even if player isn't ready yet)
+    if (hasValidTrackUri && trackUri !== previousUri) {
+      previousTrackUriRef.current = trackUri
+    }
+
+    // Only update playback if trackUri actually changed, player is ready, and we have a valid trackUri
+    if (isReady && trackUriChanged && session?.accessToken && deviceId && player) {
+      console.log('Track URI changed, updating playback...', { old: previousUri, new: trackUri })
+
+      // First, stop any current playback
+      fetch('https://api.spotify.com/v1/me/player/pause', {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${session.accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          device_ids: [deviceId],
-          play: false
+          'Authorization': `Bearer ${session.accessToken}`
+        }
+      }).catch(() => {
+        // Ignore errors if nothing is playing
+      }).then(() => {
+        // Set device as active
+        return fetch('https://api.spotify.com/v1/me/player', {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${session.accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            device_ids: [deviceId],
+            play: false
+          })
         })
       }).then(() => {
         console.log('Device set as active for new track')
+        // Play the new track from the beginning
         return fetch('https://api.spotify.com/v1/me/player/play', {
           method: 'PUT',
           headers: {
@@ -488,10 +550,12 @@ export default forwardRef<SpotifyPlayerRef, Props>(function SpotifyPlayer({ trac
           },
           body: JSON.stringify({
             uris: [trackUri],
+            position_ms: 0
           }),
         })
       }).then(() => {
         console.log('New track queued for playback')
+        // Pause immediately so user can control when to start
         return fetch('https://api.spotify.com/v1/me/player/pause', {
           method: 'PUT',
           headers: {
@@ -500,6 +564,9 @@ export default forwardRef<SpotifyPlayerRef, Props>(function SpotifyPlayer({ trac
         })
       }).then(() => {
         console.log('New track playback initialized')
+        // Wait a bit for the state to update
+        return new Promise(resolve => setTimeout(resolve, 500))
+      }).then(() => {
         // Get initial state after setup
         if (player) {
           return player.getCurrentState()
@@ -512,15 +579,11 @@ export default forwardRef<SpotifyPlayerRef, Props>(function SpotifyPlayer({ trac
       }).catch((err) => {
         console.error('Error updating track playback:', err)
       })
+    } else if (hasValidTrackUri && !isReady) {
+      // TrackUri is available but player isn't ready yet - it will be loaded when player becomes ready
+      console.log('Track URI available but player not ready yet, will load when ready')
     }
   }, [trackUri, isReady, session?.accessToken, deviceId, player])
-
-  // Mark initial load as complete when player is ready
-  useEffect(() => {
-    if (isReady) {
-      initialLoadRef.current = false
-    }
-  }, [isReady])
 
   // Poll for playback position updates
   useEffect(() => {
@@ -612,6 +675,34 @@ export default forwardRef<SpotifyPlayerRef, Props>(function SpotifyPlayer({ trac
     if (!player || !playbackState || !session?.accessToken) return
     const newPosition = Math.max(playbackState.position - 10000, 0)
     await fetch(`https://api.spotify.com/v1/me/player/seek?position_ms=${Math.floor(newPosition)}`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${session.accessToken}`,
+      },
+    })
+    const newState = await player.getCurrentState()
+    if (newState) {
+      setPlaybackState(newState)
+    }
+  }
+
+  const seekToStart = async () => {
+    if (!player || !session?.accessToken) return
+    await fetch(`https://api.spotify.com/v1/me/player/seek?position_ms=0`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${session.accessToken}`,
+      },
+    })
+    const newState = await player.getCurrentState()
+    if (newState) {
+      setPlaybackState(newState)
+    }
+  }
+
+  const seekToEnd = async () => {
+    if (!player || !playbackState || !session?.accessToken) return
+    await fetch(`https://api.spotify.com/v1/me/player/seek?position_ms=${Math.floor(playbackState.duration)}`, {
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${session.accessToken}`,
@@ -720,14 +811,16 @@ export default forwardRef<SpotifyPlayerRef, Props>(function SpotifyPlayer({ trac
         {/* Playback Controls */}
         <div className="flex items-center justify-between gap-4">
           <button
-            onClick={skipPrevious}
+            onClick={seekToStart}
             className="p-2 hover:bg-secondary rounded-md transition-colors"
+            title="Skip to start"
           >
             <SkipBack className="h-5 w-5" />
           </button>
           <button
             onClick={seekBackward}
             className="p-2 hover:bg-secondary rounded-md transition-colors"
+            title="Rewind 10 seconds"
           >
             <SkipBack className="h-5 w-5" />
           </button>
@@ -744,12 +837,14 @@ export default forwardRef<SpotifyPlayerRef, Props>(function SpotifyPlayer({ trac
           <button
             onClick={seekForward}
             className="p-2 hover:bg-secondary rounded-md transition-colors"
+            title="Forward 10 seconds"
           >
             <SkipForward className="h-5 w-5" />
           </button>
           <button
-            onClick={skipPrevious}
+            onClick={seekToEnd}
             className="p-2 hover:bg-secondary rounded-md transition-colors"
+            title="Skip to end"
           >
             <SkipForward className="h-5 w-5" />
           </button>

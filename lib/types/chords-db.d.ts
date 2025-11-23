@@ -6,6 +6,7 @@ declare module '@tombatossals/chords-db' {
                 fingers: number[];
                 barres: number[];
                 capo: boolean;
+                baseFret?: number; // Add baseFret
             }[];
         };
     };

@@ -1005,7 +1005,7 @@ export default function EditChordsPage({ params }: { params: Promise<{ artist: s
 
                                     {/* Lyrics text */}
                                     <div className="text-lg pt-2">
-                                        {line.text}
+                                        {line.text?.trim() || <em> * instrumental * </em>}
                                     </div>
                                 </div>
                             </div>
