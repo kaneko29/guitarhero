@@ -7,6 +7,7 @@ type ChordData = {
     fingers: number[];
     barres: number[];
     capo: boolean;
+    baseFret?: number; // Add baseFret
     position?: number; // Add position number to identify different variations
 };
 
@@ -61,6 +62,7 @@ export const useChordData = () => {
             fingers: position.fingers,
             barres: position.barres,
             capo: position.capo ?? false,
+            baseFret: position.baseFret, // Add baseFret extraction
             position: index + 1
         }));
     };

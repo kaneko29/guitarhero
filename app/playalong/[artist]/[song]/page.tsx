@@ -9,6 +9,7 @@ import { useSession } from 'next-auth/react'
 import { WordTiming, ChordPlacement } from '@/lib/types'
 
 import { useUser, useUserLoading } from '@/app/providers/UserProvider'
+import { useSongContext } from '@/app/providers/SongContextProvider'
 
 import SpotifyPlayer, { SpotifyPlayerRef } from '../../../components/SpotifyPlayer'
 import { supabase } from '@/lib/supabaseClient'
@@ -76,7 +77,7 @@ export default function SongPage({ params }: Props) {
   const [lyricData, setLyricData] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
   const [chordPlacements, setChordPlacements] = useState<ChordPlacement[]>([])
-  const [chords, setChords] = useState<Chord[]>([])
+  const [chordsLocal, setChordsLocal] = useState<Chord[]>([])
   const [songData, setSongData] = useState<Song | null>(null)
   const { getChordData } = useChordData()
   const lyricsContainerRef = useRef<HTMLDivElement>(null)
@@ -106,6 +107,7 @@ export default function SongPage({ params }: Props) {
   const router = useRouter()
 
   const user = useUser() as any;
+  const { setSong, setChords, setCurrentChord } = useSongContext();
   const [genres, setGenres] = useState<{ id: number; name: string }[]>([]);
   const [selectedGenre, setSelectedGenre] = useState<number | null>(null);
   const [genreLoading, setGenreLoading] = useState(false);
@@ -134,6 +136,11 @@ export default function SongPage({ params }: Props) {
 
         if (songData) {
           setSongData(songData)
+          // Update song context for chatbot
+          setSong({
+            title: songData.title,
+            artist: songData.artist
+          })
         }
       } catch (err) {
         console.error('Error loading song data:', err)
@@ -210,10 +217,14 @@ export default function SongPage({ params }: Props) {
 
           if (editData) {
             setChordPlacements(editData.chord_data || [])
-            setChords(editData.chords || [])
+            setChordsLocal(editData.chords || [])
+            // Update chords context for chatbot
+            const chordNames = editData.chords?.map((c: Chord) => c.chord_name) || []
+            setChords(chordNames) // This is the context setter
           } else {
             setChordPlacements([])
-            setChords([])
+            setChordsLocal([])
+            setChords([]) // Clear chord context
           }
         }
       } catch (err) {
@@ -303,7 +314,7 @@ export default function SongPage({ params }: Props) {
 
   // Function to get the position for a chord
   const getChordPosition = (chordName: string) => {
-    const savedChord = chords.find(c => c.chord_name === chordName)
+    const savedChord = chordsLocal.find(c => c.chord_name === chordName)
     return savedChord?.chord_position ?? 0
   }
 
@@ -473,6 +484,7 @@ export default function SongPage({ params }: Props) {
                                     onMouseEnter={(e) => {
                                       setHoveredChord({ chord: chordName, position: placement.chord_position ?? 0, lineIndex, placementIndex: index })
                                       setTooltipPosition({ x: e.clientX, y: e.clientY })
+                                      setCurrentChord(chordName) // Update current chord context
                                     }}
                                     onMouseLeave={() => {
                                       setHoveredChord(null)
@@ -530,6 +542,7 @@ export default function SongPage({ params }: Props) {
                                     onMouseEnter={(e) => {
                                       setHoveredChord({ chord: chordName, position: placement.chord_position ?? 0, lineIndex, placementIndex: index })
                                       setTooltipPosition({ x: e.clientX, y: e.clientY })
+                                      setCurrentChord(chordName) // Update current chord context
                                     }}
                                     onMouseLeave={() => {
                                       setHoveredChord(null)

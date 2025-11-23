@@ -14,6 +14,7 @@ type ChordDiagramProps = {
     fingers: number[]
     barres: number[]
     capo: boolean
+    baseFret?: number // Add baseFret
   }
   lite?: boolean
   size?: number
