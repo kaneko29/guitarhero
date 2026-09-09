@@ -4,7 +4,10 @@ const nextConfig = {
         ignoreDuringBuilds: true, // 👈 allows build to succeed despite ESLint errors yuh
     },
     images: {
-        domains: ['i.scdn.co'], // Allow images from Spotify's CDN
+        remotePatterns: [
+            { protocol: 'https', hostname: 'i.scdn.co' }, // Spotify's CDN
+            { protocol: 'https', hostname: '*.bcbits.com' }, // Bandcamp's CDN
+        ],
     },
 }
 
