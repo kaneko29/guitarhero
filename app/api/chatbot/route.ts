@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ChatOpenAI } from '@langchain/openai'
-import { HumanMessage, AIMessage, SystemMessage } from '@langchain/core/messages'
+import { HumanMessage, AIMessage, SystemMessage, type BaseMessage } from '@langchain/core/messages'
 
 // Initialize the OpenAI chat model
 const model = new ChatOpenAI({
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Convert chat history to LangChain messages
-    const messages = [
+    const messages: BaseMessage[] = [
       new SystemMessage(getSystemPrompt(contextString))
     ]
 
