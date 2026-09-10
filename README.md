@@ -1,6 +1,6 @@
 # GuitarHero
 
-A web app for learning songs on guitar. You search for a track, and GuitarHero plays it back with the lyrics scrolling in time and the chords sitting above the words where they actually change — so you can practice without pausing to scroll a tab in another window.
+A web app for learning songs on guitar. You search for a track, and GuitarHero plays it back with the lyrics scrolling in time and the chords sitting above the words where they actually change, so you can practice without pausing to scroll a tab in another window.
 
 I built it in the summer of 2025 while learning guitar. The problem I kept hitting was that the audio and the chord sheet lived in two different places; this is my attempt at putting them together.
 
